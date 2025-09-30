@@ -1,0 +1,5 @@
+{
+  "name": "Generator Pose & Ekspresi AI",
+  "description": "Aplikasi bertenaga AI untuk menghasilkan berbagai pose tubuh dan ekspresi wajah pada foto yang diunggah. Pengguna dapat memilih dari preset, mencari opsi, atau menggunakan prompt kustom untuk memandu AI.",
+  "requestFramePermissions": []
+}
