@@ -1,11 +1,24 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CloseIcon } from './icons/CloseIcon';
+import type { AppSettings } from '../types';
 
 interface SettingsModalProps {
   onClose: () => void;
+  currentSettings: AppSettings;
+  onSave: (settings: AppSettings) => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, currentSettings, onSave }) => {
+  const [localSettings, setLocalSettings] = useState<AppSettings>(currentSettings);
+
+  const handleSave = () => {
+    onSave(localSettings);
+  };
+
+  const handleSettingChange = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+    setLocalSettings(prev => ({ ...prev, [key]: value }));
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onClick={onClose}>
       <div 
@@ -18,10 +31,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             <CloseIcon />
           </button>
         </div>
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-6">
+            <div>
+              <label htmlFor="api-key" className="block text-sm font-medium text-gray-300">Kunci API Gemini</label>
+              <input 
+                id="api-key"
+                type="password"
+                placeholder="Masukkan kunci API Anda di sini"
+                className="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                value={localSettings.apiKey}
+                onChange={(e) => handleSettingChange('apiKey', e.target.value)}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Kunci API Anda disimpan di browser. Jika kosong, akan digunakan variabel lingkungan.
+              </p>
+            </div>
             <div>
               <label htmlFor="output-quality" className="block text-sm font-medium text-gray-300">Kualitas Output</label>
-              <select id="output-quality" className="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+              <select 
+                id="output-quality" 
+                className="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                value={localSettings.quality}
+                onChange={(e) => handleSettingChange('quality', e.target.value as AppSettings['quality'])}
+              >
                 <option>Standar</option>
                 <option>Tinggi</option>
                 <option>Sangat Tinggi</option>
@@ -29,22 +61,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             </div>
              <div>
               <label htmlFor="style-preference" className="block text-sm font-medium text-gray-300">Preferensi Gaya</label>
-              <select id="style-preference" className="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+              <select 
+                id="style-preference" 
+                className="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                value={localSettings.style}
+                onChange={(e) => handleSettingChange('style', e.target.value as AppSettings['style'])}
+              >
                 <option>Fotorrealistis</option>
                 <option>Artistik</option>
                 <option>Sinematik</option>
               </select>
             </div>
-             <div className="text-sm text-gray-500 pt-2">
-                Catatan: Kunci API dikonfigurasi melalui variabel lingkungan `process.env.API_KEY` dan tidak dapat diubah di sini.
-             </div>
         </div>
         <div className="px-6 py-3 bg-gray-700/50 text-right rounded-b-lg">
              <button
-              onClick={onClose}
+              onClick={handleSave}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors duration-300"
             >
-              Tutup
+              Simpan Perubahan
             </button>
         </div>
       </div>

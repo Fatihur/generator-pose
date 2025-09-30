@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Header } from './components/Header';
 import { ImageUploader } from './components/ImageUploader';
 import { OptionSelector } from './components/OptionSelector';
@@ -9,7 +9,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { Spinner } from './components/Spinner';
 import { getSuggestions, generateFourImages } from './services/geminiService';
 import { INITIAL_POSES, INITIAL_EXPRESSIONS } from './constants';
-import type { GeneratedImage } from './types';
+import type { GeneratedImage, AppSettings } from './types';
 
 export default function App() {
   const [uploadedImage, setUploadedImage] = useState<{ file: File; base64: string } | null>(null);
@@ -25,24 +25,53 @@ export default function App() {
   const [currentImageIndex, setCurrentImageIndex] = useState<number>(0);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
 
+  const [settings, setSettings] = useState<AppSettings>({
+    quality: 'Standar',
+    style: 'Fotorrealistis',
+    apiKey: '',
+  });
+
+  useEffect(() => {
+    const savedApiKey = localStorage.getItem('gemini-api-key');
+    if (savedApiKey) {
+      setSettings(prev => ({ ...prev, apiKey: savedApiKey }));
+    }
+  }, []);
+
+  const handleSettingsSave = (newSettings: AppSettings) => {
+    setSettings(newSettings);
+    if (newSettings.apiKey) {
+      localStorage.setItem('gemini-api-key', newSettings.apiKey);
+    } else {
+      localStorage.removeItem('gemini-api-key');
+    }
+    setIsSettingsModalOpen(false);
+  };
+
   const handleGenerate = async () => {
     if (!uploadedImage) {
       setError('Silakan unggah gambar terlebih dahulu.');
       return;
     }
+    if (!settings.apiKey && !process.env.API_KEY) {
+      setError('Kunci API belum diatur. Silakan atur di menu Pengaturan.');
+      return;
+    }
+
     setError('');
     setIsLoading(true);
     setGeneratedImages([]);
 
     try {
-      const fullPrompt = `Ubah orang di gambar ini. Terapkan pose berikut: "${selectedPose}". Terapkan ekspresi wajah berikut: "${selectedExpression}". Instruksi tambahan: "${customPrompt}". Fokus pada perubahan yang realistis dan berkualitas tinggi.`;
+      const fullPrompt = `Ubah orang di gambar ini. Terapkan pose berikut: "${selectedPose}". Terapkan ekspresi wajah berikut: "${selectedExpression}". Instruksi tambahan: "${customPrompt}".`;
       
-      const results = await generateFourImages(uploadedImage.base64, uploadedImage.file.type, fullPrompt);
+      const results = await generateFourImages(uploadedImage.base64, uploadedImage.file.type, fullPrompt, settings);
       setGeneratedImages(results);
 
     } catch (err) {
       console.error(err);
-      setError('Gagal menghasilkan gambar. Silakan periksa kunci API Anda dan coba lagi.');
+      const errorMessage = (err instanceof Error) ? err.message : 'Terjadi kesalahan tidak dikenal.';
+      setError(`Gagal menghasilkan gambar. ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }
@@ -55,13 +84,15 @@ export default function App() {
 
   const handlePoseSearch = useCallback(async (keyword: string) => {
     if (!keyword) return INITIAL_POSES;
-    return await getSuggestions(keyword, 'pose');
-  }, []);
+    if (!settings.apiKey && !process.env.API_KEY) return ['Kunci API belum diatur.'];
+    return await getSuggestions(keyword, 'pose', settings.apiKey);
+  }, [settings.apiKey]);
 
   const handleExpressionSearch = useCallback(async (keyword: string) => {
     if (!keyword) return INITIAL_EXPRESSIONS;
-    return await getSuggestions(keyword, 'ekspresi');
-  }, []);
+    if (!settings.apiKey && !process.env.API_KEY) return ['Kunci API belum diatur.'];
+    return await getSuggestions(keyword, 'ekspresi', settings.apiKey);
+  }, [settings.apiKey]);
 
   return (
     <div className="bg-gray-900 text-white min-h-screen font-sans">
@@ -122,7 +153,13 @@ export default function App() {
           onClose={() => setIsGalleryModalOpen(false)}
         />
       )}
-      {isSettingsModalOpen && <SettingsModal onClose={() => setIsSettingsModalOpen(false)} />}
+      {isSettingsModalOpen && (
+        <SettingsModal 
+          currentSettings={settings}
+          onSave={handleSettingsSave}
+          onClose={() => setIsSettingsModalOpen(false)} 
+        />
+      )}
     </div>
   );
 }

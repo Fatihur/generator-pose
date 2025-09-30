@@ -1,15 +1,18 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import type { GeneratedImage } from '../types';
+import type { GeneratedImage, AppSettings } from '../types';
 
-if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable is not set.");
-}
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getAiClient = (apiKey?: string) => {
+  const key = apiKey || process.env.API_KEY;
+  if (!key) {
+    throw new Error("Kunci API tidak diberikan atau diatur dalam variabel lingkungan.");
+  }
+  return new GoogleGenAI({ apiKey: key });
+};
 
 // Function to generate pose/expression suggestions
-export const getSuggestions = async (keyword: string, type: 'pose' | 'ekspresi'): Promise<string[]> => {
+export const getSuggestions = async (keyword: string, type: 'pose' | 'ekspresi', apiKey: string): Promise<string[]> => {
   try {
+    const ai = getAiClient(apiKey);
     const prompt = type === 'pose'
       ? `Berikan 5 variasi atau deskripsi yang lebih spesifik untuk pose tubuh berdasarkan kata kunci: "${keyword}". Contohnya, jika kata kuncinya 'duduk', variasinya bisa 'duduk bersila' atau 'duduk santai'. Fokus hanya pada deskripsi pose tubuh.`
       : `Berikan 5 variasi atau deskripsi yang lebih spesifik untuk ekspresi wajah berdasarkan kata kunci: "${keyword}". Contohnya, jika kata kuncinya 'senyum', variasinya bisa 'senyum tipis' atau 'senyum lebar'. Fokus hanya pada deskripsi ekspresi wajah.`;
@@ -42,6 +45,7 @@ export const getSuggestions = async (keyword: string, type: 'pose' | 'ekspresi')
 
 // Function to generate a single image
 const generateImage = async (
+    ai: GoogleGenAI,
     base64ImageData: string,
     mimeType: string,
     prompt: string
@@ -60,7 +64,6 @@ const generateImage = async (
       },
     });
     
-    // Find the image part in the response
     for (const part of response.candidates[0].content.parts) {
         if (part.inlineData) {
             const base64ImageBytes: string = part.inlineData.data;
@@ -72,20 +75,37 @@ const generateImage = async (
         }
     }
     
-    throw new Error("No image data found in the Gemini API response.");
+    throw new Error("Tidak ada data gambar yang ditemukan dalam respons API Gemini.");
 };
 
 // Function to generate four images in parallel
 export const generateFourImages = async (
   base64ImageData: string,
   mimeType: string,
-  prompt: string
+  basePrompt: string,
+  settings: AppSettings
 ): Promise<GeneratedImage[]> => {
+  
+  const ai = getAiClient(settings.apiKey);
+
+  let settingsPrompt = ' Fokus pada perubahan yang realistis.';
+  if (settings.style !== 'Fotorrealistis') {
+    settingsPrompt += ` Gaya gambar harus ${settings.style.toLowerCase()}.`;
+  }
+  if (settings.quality === 'Tinggi') {
+    settingsPrompt += ` Hasilkan gambar dengan kualitas tinggi dan detail yang baik.`;
+  }
+  if (settings.quality === 'Sangat Tinggi') {
+    settingsPrompt += ` Hasilkan gambar dengan kualitas sangat tinggi, detail tajam, dan pencahayaan profesional.`;
+  }
+
+  const finalPrompt = basePrompt + settingsPrompt;
+
   const promises = [
-    generateImage(base64ImageData, mimeType, prompt),
-    generateImage(base64ImageData, mimeType, prompt + " (variasi 1)"),
-    generateImage(base64ImageData, mimeType, prompt + " (variasi 2)"),
-    generateImage(base64ImageData, mimeType, prompt + " (variasi 3)"),
+    generateImage(ai, base64ImageData, mimeType, finalPrompt),
+    generateImage(ai, base64ImageData, mimeType, finalPrompt + " (variasi 1)"),
+    generateImage(ai, base64ImageData, mimeType, finalPrompt + " (variasi 2)"),
+    generateImage(ai, base64ImageData, mimeType, finalPrompt + " (variasi 3)"),
   ];
 
   const results = await Promise.allSettled(promises);

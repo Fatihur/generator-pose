@@ -4,3 +4,9 @@ export interface GeneratedImage {
   url: string;
   prompt: string;
 }
+
+export interface AppSettings {
+  quality: 'Standar' | 'Tinggi' | 'Sangat Tinggi';
+  style: 'Fotorrealistis' | 'Artistik' | 'Sinematik';
+  apiKey: string;
+}
