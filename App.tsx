@@ -20,6 +20,7 @@ export default function App() {
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [generationProgress, setGenerationProgress] = useState<{current: number; total: number} | null>(null);
 
   const [isGalleryModalOpen, setIsGalleryModalOpen] = useState<boolean>(false);
   const [currentImageIndex, setCurrentImageIndex] = useState<number>(0);
@@ -53,7 +54,7 @@ export default function App() {
       setError('Silakan unggah gambar terlebih dahulu.');
       return;
     }
-    if (!settings.apiKey && !process.env.API_KEY) {
+    if (!settings.apiKey) {
       setError('Kunci API belum diatur. Silakan atur di menu Pengaturan.');
       return;
     }
@@ -61,11 +62,18 @@ export default function App() {
     setError('');
     setIsLoading(true);
     setGeneratedImages([]);
+    setGenerationProgress(null);
 
     try {
       const fullPrompt = `Ubah orang di gambar ini. Terapkan pose berikut: "${selectedPose}". Terapkan ekspresi wajah berikut: "${selectedExpression}". Instruksi tambahan: "${customPrompt}".`;
       
-      const results = await generateFourImages(uploadedImage.base64, uploadedImage.file.type, fullPrompt, settings);
+      const results = await generateFourImages(
+        uploadedImage.base64, 
+        uploadedImage.file.type, 
+        fullPrompt, 
+        settings,
+        (progress) => setGenerationProgress(progress)
+      );
       setGeneratedImages(results);
 
     } catch (err) {
@@ -74,6 +82,7 @@ export default function App() {
       setError(`Gagal menghasilkan gambar. ${errorMessage}`);
     } finally {
       setIsLoading(false);
+      setGenerationProgress(null);
     }
   };
   
@@ -84,13 +93,13 @@ export default function App() {
 
   const handlePoseSearch = useCallback(async (keyword: string) => {
     if (!keyword) return INITIAL_POSES;
-    if (!settings.apiKey && !process.env.API_KEY) return ['Kunci API belum diatur.'];
+    if (!settings.apiKey) return ['Kunci API belum diatur.'];
     return await getSuggestions(keyword, 'pose', settings.apiKey);
   }, [settings.apiKey]);
 
   const handleExpressionSearch = useCallback(async (keyword: string) => {
     if (!keyword) return INITIAL_EXPRESSIONS;
-    if (!settings.apiKey && !process.env.API_KEY) return ['Kunci API belum diatur.'];
+    if (!settings.apiKey) return ['Kunci API belum diatur.'];
     return await getSuggestions(keyword, 'ekspresi', settings.apiKey);
   }, [settings.apiKey]);
 
@@ -132,7 +141,12 @@ export default function App() {
             {isLoading && (
               <div className="flex flex-col items-center justify-center h-96">
                 <Spinner size="lg" />
-                <p className="mt-4 text-gray-400">AI sedang bekerja... Ini mungkin butuh beberapa saat.</p>
+                <p className="mt-4 text-gray-400">
+                  {generationProgress
+                    ? `Menghasilkan gambar ${generationProgress.current} dari ${generationProgress.total}...`
+                    : 'AI sedang bekerja... Ini mungkin butuh beberapa saat.'}
+                </p>
+                {generationProgress && <p className="text-sm text-gray-500 mt-2">Ada jeda antar gambar untuk menghindari batas kuota API.</p>}
               </div>
             )}
             {!isLoading && generatedImages.length === 0 && (

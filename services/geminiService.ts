@@ -119,13 +119,15 @@ ${qualityInstructions[settings.quality] || ''}
   return instructions.trim();
 };
 
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Function to generate four images sequentially to avoid rate limiting
 export const generateFourImages = async (
   base64ImageData: string,
   mimeType: string,
   basePrompt: string,
-  settings: AppSettings
+  settings: AppSettings,
+  onProgress: (progress: { current: number; total: number }) => void
 ): Promise<GeneratedImage[]> => {
   
   const ai = getAiClient(settings.apiKey);
@@ -141,16 +143,23 @@ export const generateFourImages = async (
   
   const successfulImages: GeneratedImage[] = [];
   const errors: any[] = [];
+  const totalImages = prompts.length;
 
-  for (const p of prompts) {
-      try {
-          // Generate images one by one
-          const image = await generateImage(ai, base64ImageData, mimeType, p);
-          successfulImages.push(image);
-      } catch (error) {
-          console.error(`Gagal membuat gambar untuk prompt:`, error);
-          errors.push(error instanceof Error ? error.message : String(error));
-      }
+  for (let i = 0; i < totalImages; i++) {
+    const p = prompts[i];
+    onProgress({ current: i + 1, total: totalImages });
+    try {
+        const image = await generateImage(ai, base64ImageData, mimeType, p);
+        successfulImages.push(image);
+    } catch (error) {
+        console.error(`Gagal membuat gambar untuk prompt:`, error);
+        errors.push(error instanceof Error ? error.message : String(error));
+    }
+
+    // Add a 15-second delay between requests to avoid rate limiting, but not after the last one.
+    if (i < totalImages - 1) {
+        await delay(15000);
+    }
   }
 
   if (successfulImages.length === 0) {
