@@ -78,6 +78,48 @@ const generateImage = async (
     throw new Error("Tidak ada data gambar yang ditemukan dalam respons API Gemini.");
 };
 
+const getPromptInstruction = (basePrompt: string, settings: AppSettings): string => {
+  const styleInstructions = {
+    'Fotorrealistis': `
+      **Instruksi Gaya: Fotorrealistis**
+      - Tujuan: Menghasilkan gambar yang sangat realistis, seolah-olah difoto dengan kamera kelas atas.
+      - Detail Utama: Fokus pada detail halus seperti tekstur kulit, pori-pori, helai rambut individu, dan pantulan cahaya yang akurat di mata.
+      - Pencahayaan: Gunakan pencahayaan alami atau seperti di studio yang menonjolkan bentuk dan volume. Hindari pencahayaan datar.
+      - Penting: Hasilnya harus mempertahankan identitas orang tersebut tetapi dalam konteks yang diminta, dengan kualitas foto profesional. Hindari tampilan "airbrushed" atau buatan AI.`,
+    'Artistik': `
+      **Instruksi Gaya: Artistik**
+      - Tujuan: Menginterpretasikan gambar asli dengan gaya artistik yang jelas.
+      - Medium: Pikirkan gaya seperti lukisan cat minyak digital, ilustrasi cat air, atau sketsa arang yang detail.
+      - Teknik: Sapuan kuas harus terlihat, tekstur kanvas atau kertas mungkin samar-samar terlihat.
+      - Warna: Gunakan palet warna yang ekspresif dan harmonis yang meningkatkan mood.
+      - Penting: Fokus pada esensi pose dan ekspresi, bukan replikasi fotorealistik.`,
+    'Sinematik': `
+      **Instruksi Gaya: Sinematik**
+      - Tujuan: Menciptakan gambar yang terasa seperti adegan dari film.
+      - Pencahayaan: Terapkan pencahayaan dramatis dengan kontras tinggi (chiaroscuro). Gunakan backlighting atau rim light untuk memisahkan subjek dari latar belakang.
+      - Color Grading: Terapkan gradasi warna film yang khas, seperti palet warna teal-and-orange, atau tampilan film vintage yang hangat.
+      - Komposisi: Pertimbangkan untuk sedikit mengubah framing untuk komposisi yang lebih dinamis. Bisa menambahkan sedikit grain film untuk tekstur.
+      - Penting: Suasana dan mood adalah kunci. Ciptakan visual yang mendalam dan menggugah cerita.`
+  };
+
+  const qualityInstructions = {
+    'Standar': `- Kualitas: Resolusi standar, detail yang baik.`,
+    'Tinggi': `- Kualitas: Resolusi tinggi, detail tajam, dan tekstur yang jelas.`,
+    'Sangat Tinggi': `- Kualitas: Kualitas master, detail sangat tajam (4K), tekstur yang sangat akurat, dan pencahayaan tingkat ahli.`
+  };
+
+  const instructions = `
+${basePrompt}
+
+**== PANDUAN GENERASI GAMBAR ==**
+${styleInstructions[settings.style] || ''}
+${qualityInstructions[settings.quality] || ''}
+  `;
+  
+  return instructions.trim();
+};
+
+
 // Function to generate four images in parallel
 export const generateFourImages = async (
   base64ImageData: string,
@@ -88,25 +130,16 @@ export const generateFourImages = async (
   
   const ai = getAiClient(settings.apiKey);
 
-  let settingsPrompt = ' Fokus pada perubahan yang realistis.';
-  if (settings.style !== 'Fotorrealistis') {
-    settingsPrompt += ` Gaya gambar harus ${settings.style.toLowerCase()}.`;
-  }
-  if (settings.quality === 'Tinggi') {
-    settingsPrompt += ` Hasilkan gambar dengan kualitas tinggi dan detail yang baik.`;
-  }
-  if (settings.quality === 'Sangat Tinggi') {
-    settingsPrompt += ` Hasilkan gambar dengan kualitas sangat tinggi, detail tajam, dan pencahayaan profesional.`;
-  }
-
-  const finalPrompt = basePrompt + settingsPrompt;
-
-  const promises = [
-    generateImage(ai, base64ImageData, mimeType, finalPrompt),
-    generateImage(ai, base64ImageData, mimeType, finalPrompt + " (variasi 1)"),
-    generateImage(ai, base64ImageData, mimeType, finalPrompt + " (variasi 2)"),
-    generateImage(ai, base64ImageData, mimeType, finalPrompt + " (variasi 3)"),
+  const mainInstruction = getPromptInstruction(basePrompt, settings);
+  
+  const prompts = [
+    `${mainInstruction}\n\n**Variasi 1:** Ikuti instruksi inti dengan cermat untuk hasil yang solid dan representatif.`,
+    `${mainInstruction}\n\n**Variasi 2:** Perkenalkan sedikit perubahan pada sudut kamera. Coba sudut pandang yang sedikit lebih rendah atau lebih tinggi untuk menambahkan drama.`,
+    `${mainInstruction}\n\n**Variasi 3:** Fokus pada interpretasi pencahayaan yang berbeda. Sambil tetap mempertahankan gaya utama, ubah sumber cahaya (misalnya, dari samping, bukan dari depan).`,
+    `${mainInstruction}\n\n**Variasi 4:** Berikan sentuhan interpretasi yang lebih kreatif. Jika ada prompt kustom, kembangkan sedikit lebih jauh, atau perkenalkan elemen latar belakang halus yang melengkapi subjek.`,
   ];
+
+  const promises = prompts.map(p => generateImage(ai, base64ImageData, mimeType, p));
 
   const results = await Promise.allSettled(promises);
   
