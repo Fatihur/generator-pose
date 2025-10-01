@@ -120,7 +120,7 @@ ${qualityInstructions[settings.quality] || ''}
 };
 
 
-// Function to generate four images in parallel
+// Function to generate four images sequentially to avoid rate limiting
 export const generateFourImages = async (
   base64ImageData: string,
   mimeType: string,
@@ -138,18 +138,23 @@ export const generateFourImages = async (
     `${mainInstruction}\n\n**Variasi 3:** Fokus pada interpretasi pencahayaan yang berbeda. Sambil tetap mempertahankan gaya utama, ubah sumber cahaya (misalnya, dari samping, bukan dari depan).`,
     `${mainInstruction}\n\n**Variasi 4:** Berikan sentuhan interpretasi yang lebih kreatif. Jika ada prompt kustom, kembangkan sedikit lebih jauh, atau perkenalkan elemen latar belakang halus yang melengkapi subjek.`,
   ];
-
-  const promises = prompts.map(p => generateImage(ai, base64ImageData, mimeType, p));
-
-  const results = await Promise.allSettled(promises);
   
-  const successfulImages = results
-    .filter((result): result is PromiseFulfilledResult<GeneratedImage> => result.status === 'fulfilled')
-    .map(result => result.value);
+  const successfulImages: GeneratedImage[] = [];
+  const errors: any[] = [];
+
+  for (const p of prompts) {
+      try {
+          // Generate images one by one
+          const image = await generateImage(ai, base64ImageData, mimeType, p);
+          successfulImages.push(image);
+      } catch (error) {
+          console.error(`Gagal membuat gambar untuk prompt:`, error);
+          errors.push(error instanceof Error ? error.message : String(error));
+      }
+  }
 
   if (successfulImages.length === 0) {
-      const firstError = results.find(r => r.status === 'rejected') as PromiseRejectedResult | undefined;
-      throw new Error(`Semua pembuatan gambar gagal. Kesalahan pertama: ${firstError?.reason}`);
+      throw new Error(`Semua pembuatan gambar gagal. Kesalahan pertama: ${errors[0] || 'Kesalahan tidak diketahui'}`);
   }
 
   return successfulImages;
