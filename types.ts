@@ -6,7 +6,7 @@ export interface GeneratedImage {
 }
 
 export interface AppSettings {
+  apiKey: string;
   quality: 'Standar' | 'Tinggi' | 'Sangat Tinggi';
   style: 'Fotorrealistis' | 'Artistik' | 'Sinematik';
-  apiKey: string;
 }

@@ -11,6 +11,8 @@ import { getSuggestions, generateFourImages } from './services/geminiService';
 import { INITIAL_POSES, INITIAL_EXPRESSIONS } from './constants';
 import type { GeneratedImage, AppSettings } from './types';
 
+const APP_SETTINGS_KEY = 'aiPoseGeneratorSettings';
+
 export default function App() {
   const [uploadedImage, setUploadedImage] = useState<{ file: File; base64: string } | null>(null);
   const [selectedPose, setSelectedPose] = useState<string>(INITIAL_POSES[0]);
@@ -20,33 +22,57 @@ export default function App() {
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
-  const [generationProgress, setGenerationProgress] = useState<{current: number; total: number} | null>(null);
-
+  
   const [isGalleryModalOpen, setIsGalleryModalOpen] = useState<boolean>(false);
   const [currentImageIndex, setCurrentImageIndex] = useState<number>(0);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
 
   const [settings, setSettings] = useState<AppSettings>({
+    apiKey: '',
     quality: 'Standar',
     style: 'Fotorrealistis',
-    apiKey: '',
   });
 
+  // Load settings from local storage on initial render
   useEffect(() => {
-    const savedApiKey = localStorage.getItem('gemini-api-key');
-    if (savedApiKey) {
-      setSettings(prev => ({ ...prev, apiKey: savedApiKey }));
+    try {
+      const storedSettings = localStorage.getItem(APP_SETTINGS_KEY);
+      if (storedSettings) {
+        const parsedSettings = JSON.parse(storedSettings);
+        setSettings(s => ({...s, ...parsedSettings}));
+      } else {
+         setError("Harap masukkan Kunci API Gemini Anda di menu Pengaturan.");
+         setIsSettingsModalOpen(true);
+      }
+    } catch (e) {
+      console.error("Gagal memuat pengaturan:", e);
     }
   }, []);
 
-  const handleSettingsSave = (newSettings: AppSettings) => {
-    setSettings(newSettings);
-    if (newSettings.apiKey) {
-      localStorage.setItem('gemini-api-key', newSettings.apiKey);
+  // Show error if API key is missing after loading
+  useEffect(() => {
+    if (!settings.apiKey) {
+      setError("Harap masukkan Kunci API Gemini Anda di menu Pengaturan.");
     } else {
-      localStorage.removeItem('gemini-api-key');
+      setError('');
     }
-    setIsSettingsModalOpen(false);
+  }, [settings.apiKey]);
+
+
+  const handleSettingsSave = (newSettings: AppSettings) => {
+    try {
+        setSettings(newSettings);
+        localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(newSettings));
+        setIsSettingsModalOpen(false);
+        if(!newSettings.apiKey) {
+           setError("Harap masukkan Kunci API Gemini Anda di menu Pengaturan.");
+        } else {
+           setError('');
+        }
+    } catch(e) {
+        console.error("Gagal menyimpan pengaturan:", e);
+        setError("Tidak dapat menyimpan pengaturan. Local storage mungkin penuh atau dinonaktifkan.");
+    }
   };
 
   const handleGenerate = async () => {
@@ -54,25 +80,27 @@ export default function App() {
       setError('Silakan unggah gambar terlebih dahulu.');
       return;
     }
-    if (!settings.apiKey) {
-      setError('Kunci API belum diatur. Silakan atur di menu Pengaturan.');
+     if (!settings.apiKey) {
+      setError('Harap masukkan Kunci API Gemini Anda di menu Pengaturan sebelum menghasilkan gambar.');
+      setIsSettingsModalOpen(true);
       return;
     }
-
+    
     setError('');
     setIsLoading(true);
     setGeneratedImages([]);
-    setGenerationProgress(null);
 
     try {
       const fullPrompt = `Ubah orang di gambar ini. Terapkan pose berikut: "${selectedPose}". Terapkan ekspresi wajah berikut: "${selectedExpression}". Instruksi tambahan: "${customPrompt}".`;
       
+      const { apiKey, ...generationSettings } = settings;
+
       const results = await generateFourImages(
+        apiKey,
         uploadedImage.base64, 
         uploadedImage.file.type, 
         fullPrompt, 
-        settings,
-        (progress) => setGenerationProgress(progress)
+        generationSettings
       );
       setGeneratedImages(results);
 
@@ -82,7 +110,6 @@ export default function App() {
       setError(`Gagal menghasilkan gambar. ${errorMessage}`);
     } finally {
       setIsLoading(false);
-      setGenerationProgress(null);
     }
   };
   
@@ -93,14 +120,14 @@ export default function App() {
 
   const handlePoseSearch = useCallback(async (keyword: string) => {
     if (!keyword) return INITIAL_POSES;
-    if (!settings.apiKey) return ['Kunci API belum diatur.'];
-    return await getSuggestions(keyword, 'pose', settings.apiKey);
+    if (!settings.apiKey) return ['Masukkan Kunci API untuk menggunakan pencarian.'];
+    return await getSuggestions(settings.apiKey, keyword, 'pose');
   }, [settings.apiKey]);
 
   const handleExpressionSearch = useCallback(async (keyword: string) => {
     if (!keyword) return INITIAL_EXPRESSIONS;
-    if (!settings.apiKey) return ['Kunci API belum diatur.'];
-    return await getSuggestions(keyword, 'ekspresi', settings.apiKey);
+     if (!settings.apiKey) return ['Masukkan Kunci API untuk menggunakan pencarian.'];
+    return await getSuggestions(settings.apiKey, keyword, 'ekspresi');
   }, [settings.apiKey]);
 
   return (
@@ -142,14 +169,11 @@ export default function App() {
               <div className="flex flex-col items-center justify-center h-96">
                 <Spinner size="lg" />
                 <p className="mt-4 text-gray-400">
-                  {generationProgress
-                    ? `Menghasilkan gambar ${generationProgress.current} dari ${generationProgress.total}...`
-                    : 'AI sedang bekerja... Ini mungkin butuh beberapa saat.'}
+                  AI sedang bekerja... Ini mungkin butuh beberapa saat.
                 </p>
-                {generationProgress && <p className="text-sm text-gray-500 mt-2">Ada jeda antar gambar untuk menghindari batas kuota API.</p>}
               </div>
             )}
-            {!isLoading && generatedImages.length === 0 && (
+            {!isLoading && generatedImages.length === 0 && !error && (
                  <div className="flex flex-col items-center justify-center h-96 text-gray-500 text-center">
                     <p className="text-lg">Gambar yang Anda hasilkan akan muncul di sini.</p>
                     <p className="text-sm">Unggah foto dan atur preferensi Anda untuk memulai.</p>

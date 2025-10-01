@@ -1,16 +1,15 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import type { GeneratedImage, AppSettings } from '../types';
 
-const getAiClient = (apiKey?: string) => {
-  const key = apiKey || process.env.API_KEY;
-  if (!key) {
-    throw new Error("Kunci API tidak diberikan atau diatur dalam variabel lingkungan.");
+const getAiClient = (apiKey: string) => {
+  if (!apiKey) {
+    throw new Error("Kunci API belum diatur. Silakan masukkan di menu Pengaturan.");
   }
-  return new GoogleGenAI({ apiKey: key });
+  return new GoogleGenAI({ apiKey });
 };
 
 // Function to generate pose/expression suggestions
-export const getSuggestions = async (keyword: string, type: 'pose' | 'ekspresi', apiKey: string): Promise<string[]> => {
+export const getSuggestions = async (apiKey: string, keyword: string, type: 'pose' | 'ekspresi'): Promise<string[]> => {
   try {
     const ai = getAiClient(apiKey);
     const prompt = type === 'pose'
@@ -78,7 +77,7 @@ const generateImage = async (
     throw new Error("Tidak ada data gambar yang ditemukan dalam respons API Gemini.");
 };
 
-const getPromptInstruction = (basePrompt: string, settings: AppSettings): string => {
+const getPromptInstruction = (basePrompt: string, settings: Omit<AppSettings, 'apiKey'>): string => {
   const styleInstructions = {
     'Fotorrealistis': `
       **Instruksi Gaya: Fotorrealistis**
@@ -119,18 +118,16 @@ ${qualityInstructions[settings.quality] || ''}
   return instructions.trim();
 };
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Function to generate four images sequentially to avoid rate limiting
+// Function to generate four images in parallel
 export const generateFourImages = async (
+  apiKey: string,
   base64ImageData: string,
   mimeType: string,
   basePrompt: string,
-  settings: AppSettings,
-  onProgress: (progress: { current: number; total: number }) => void
+  settings: Omit<AppSettings, 'apiKey'>
 ): Promise<GeneratedImage[]> => {
   
-  const ai = getAiClient(settings.apiKey);
+  const ai = getAiClient(apiKey);
 
   const mainInstruction = getPromptInstruction(basePrompt, settings);
   
@@ -141,29 +138,18 @@ export const generateFourImages = async (
     `${mainInstruction}\n\n**Variasi 4:** Berikan sentuhan interpretasi yang lebih kreatif. Jika ada prompt kustom, kembangkan sedikit lebih jauh, atau perkenalkan elemen latar belakang halus yang melengkapi subjek.`,
   ];
   
-  const successfulImages: GeneratedImage[] = [];
-  const errors: any[] = [];
-  const totalImages = prompts.length;
+  const imagePromises = prompts.map(p => generateImage(ai, base64ImageData, mimeType, p));
 
-  for (let i = 0; i < totalImages; i++) {
-    const p = prompts[i];
-    onProgress({ current: i + 1, total: totalImages });
-    try {
-        const image = await generateImage(ai, base64ImageData, mimeType, p);
-        successfulImages.push(image);
-    } catch (error) {
-        console.error(`Gagal membuat gambar untuk prompt:`, error);
-        errors.push(error instanceof Error ? error.message : String(error));
-    }
+  const results = await Promise.allSettled(imagePromises);
 
-    // Add a 15-second delay between requests to avoid rate limiting, but not after the last one.
-    if (i < totalImages - 1) {
-        await delay(15000);
-    }
-  }
+  const successfulImages = results
+    .filter((result): result is PromiseFulfilledResult<GeneratedImage> => result.status === 'fulfilled')
+    .map(result => result.value);
 
   if (successfulImages.length === 0) {
-      throw new Error(`Semua pembuatan gambar gagal. Kesalahan pertama: ${errors[0] || 'Kesalahan tidak diketahui'}`);
+      const firstError = results.find(result => result.status === 'rejected') as PromiseRejectedResult | undefined;
+      const errorMessage = firstError ? (firstError.reason as Error)?.message || String(firstError.reason) : 'Kesalahan tidak diketahui';
+      throw new Error(`Semua pembuatan gambar gagal. Kesalahan pertama: ${errorMessage}`);
   }
 
   return successfulImages;

@@ -35,15 +35,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, currentSe
             <div>
               <label htmlFor="api-key" className="block text-sm font-medium text-gray-300">Kunci API Gemini</label>
               <input 
-                id="api-key"
                 type="password"
-                placeholder="Masukkan kunci API Anda di sini"
+                id="api-key" 
                 className="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="Masukkan kunci API Anda"
                 value={localSettings.apiKey}
                 onChange={(e) => handleSettingChange('apiKey', e.target.value)}
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Kunci API Anda disimpan di browser. Jika kosong, akan digunakan variabel lingkungan.
+              <p className="mt-2 text-xs text-gray-400">
+                Kunci API Anda disimpan dengan aman di browser Anda.
               </p>
             </div>
             <div>
